@@ -4,6 +4,8 @@ import time
 import audacityClient
 from assignTrackID3Tags import applyTrackInfo
 
+from tqdm import tqdm
+
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from dotenv import load_dotenv
@@ -20,8 +22,11 @@ trackArtistCol = "Nom(s) de l'artiste"
 trackImageURL = "URL de l'image de l'album"
 safetyMarginInSeconds = 1
 
-dataFolder = "/Users/theobernier/Music/Downloads/spotify_download_22_4_25"
-playlistFolder = "/Users/theobernier/Music/Downloads/spotify_download_22_4_25"
+dataFolder = "/Users/theobernier/Music/Downloads/dowload-26-10-25"
+playlistFolder = "/Users/theobernier/Music/Downloads/dowload-26-10-25"
+playlistFileName = "track_infos.csv"
+
+
 
 
 
@@ -72,7 +77,6 @@ def waitForClientExport(client):
     waitForClient(client, "Exported to MP3")
 
 def exportToMp3(client, track):
-    trackName = f'{track[trackNameCol].replace(" ", "_")}--{track[trackArtistCol].replace(" ", "_")}'
     client.write("SelectAll")
     time.sleep(0.5)
     getClientStatus(client)
@@ -81,7 +85,7 @@ def exportToMp3(client, track):
     waitForClientNormalize(client)
 
 
-    client.write(f"Export2: Filename={buildTrackFilePath(track)} NumChannels=1.0")
+    client.write(f"Export2: Filename={buildTrackFilePath(track)} NumChannels=2")
     waitForClientExport(client)
     client.write("SelectAll")
     client.write("RemoveTracks")
@@ -94,8 +98,8 @@ def buildTrackFilePath(track):
 
     fileName = "%s--%s" % \
                (
-                   track[trackNameCol].replace(" ", "_").replace("\\", "-").replace("/", "_"),
-                   track[trackArtistCol].replace(" ", "_").replace("\\", "-").replace("/", "_")
+                   track[trackNameCol].replace(" ", "_").replace("\\", "-").replace("/", "_").replace('"', "in"),
+                   track[trackArtistCol].replace(" ", "_").replace("\\", "-").replace("/", "_").replace('"', "in")
                )
     return f"{dataFolder}/{fileName}.mp3"
 
@@ -111,19 +115,45 @@ def getTrackAlbumCover(track):
     data = requests.get(coverUrl).content
     return io.BytesIO(data)
 
+def pauseSpotifyPlayback(spotifyClient):
+    pauseRetryCounter = 0
+    pauseRetryLimit = 5
+    try:
+        spotifyClient.pause_playback()
+
+    except:
+        if pauseRetryCounter < pauseRetryLimit:
+            print("WARNING: Failed to pause spotify playback, reauthenticating to spotify and retrying now")
+            time.sleep(1)
+            spotifyClient = authenticateToSpotify()
+            spotifyClient.pause_playback()
+        else:
+            print("maximum retries exhausted, exiting program")
+            raise ConnectionResetError(54, 'Connection reset by peer')
+
 
 def main():
     spotifyClient = authenticateToSpotify()
-    tracks = getPlaylist(f"{playlistFolder}/track_infos.csv")[64:]
+    tracks = getPlaylist(f"{playlistFolder}/{playlistFileName}")
     client = audacityClient.PipeClient()
 
-    for index, track in tracks.iterrows():
-        if index < 72:
+    for index, track in tqdm(tracks.iterrows(), desc="Loading...", total=tracks.shape[0]):
+        remaining_time_in_ms = tracks[trackDurationInMsCol][index:].sum()
+        print("remaining time: ", remaining_time_in_ms/(60*1000), " min")
+
+        if index != 5:
             continue
+        # if index == 5:
+        #     exportToMp3(client, track)
+        #     assignTrackInfos(track)
+        #     continue
+
         recordTrack(client, track)
+
         playSpotifyTrack(track)
         time.sleep(track[trackDurationInMsCol] / 1000 + safetyMarginInSeconds)
-        spotifyClient.pause_playback()
+        pauseSpotifyPlayback(spotifyClient)
+
         exportToMp3(client, track)
         assignTrackInfos(track)
 

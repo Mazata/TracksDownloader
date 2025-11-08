@@ -8,7 +8,6 @@ def applyTrackInfo(filePath, trackInfo, *args, **kwargs):
     albumCover = kwargs.get('albumCover', None)
     mp3file['title'] = trackInfo['Nom du titre']
     mp3file['album'] = trackInfo["Nom de l'album"]
-    mp3file['albumartist'] = trackInfo["Nom(s) de l'artiste de l'album"]
     mp3file['artist'] = trackInfo["Nom(s) de l'artiste"]
     mp3file.save()
 
